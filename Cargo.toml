@@ -1,0 +1,33 @@
+[package]
+name = "peppi-jlrs"
+version = "0.1.0"
+edition = "2024"
+description = "Julia binding library for Peppi"
+license = "MIT"
+rust-version = "1.85"
+
+[features]
+# Setting these flags is required when cross-compiling from other platforms. When BinaryBuilder is
+# used, only the yggdrasil feature needs to be enabled.
+i686 = ["jlrs/i686"]
+windows = ["jlrs/windows"]
+lto = ["jlrs/lto"]
+
+[lib]
+crate-type = ["cdylib"]
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+lto = "fat"
+codegen-units = 1
+
+[dependencies]
+arrow2 = "0.17"
+jlrs = { version = "0.22", features = ["jlrs-derive", "ccall"] }
+peppi = "2.1"
+serde = "1.0"
+serde_json = "1.0"
+
