@@ -31,6 +31,7 @@ use std::{fs, io};
 use peppi::frame::PortOccupancy;
 use peppi::game::{Start, ICE_CLIMBERS};
 use peppi::game::immutable::Game as SlippiGame;
+use peppi::io::peppi::de::Opts as PeppiReadOpts;
 use peppi::io::slippi::de::Opts as SlippiReadOpts;
 
 /// Game data structure exposed to Julia
@@ -158,6 +159,85 @@ pub fn read_slippi(path: JuliaString, skip_frames:i8) -> CCallRefRet<Game> {
 	).leak())
 }
 
+pub fn read_peppi(path: JuliaString, skip_frames:i8) -> CCallRefRet<Game> {
+    // Open the file and parse the Slippi replay into an immutable Game.
+    // JuliaString::as_str returns a Result; avoid `?` by using unchecked.
+    let path_str = unsafe { path.as_str_unchecked() };
+    let file = fs::File::open(path_str).expect("Failed to open file");
+
+    let mut reader = io::BufReader::new(file);
+    // Use default parse options; `parse_opts` is accepted but not yet decoded.
+    let opts = PeppiReadOpts{
+		skip_frames: skip_frames != 0,
+		..Default::default()
+	};
+    let slippi_game: SlippiGame = peppi::io::peppi::read(&mut reader, Some(&opts))
+        .expect("Failed to read Slippi file");
+
+    // Map fields from SlippiGame similar to the PyO3 example.
+    let start_json = serde_json::to_string(&slippi_game.start).unwrap_or_default();
+    let end_json = slippi_game
+        .end
+        .as_ref()
+        .and_then(|m| serde_json::to_string(m).ok());
+    let metadata_json = slippi_game
+        .metadata
+        .as_ref()
+        .and_then(|m| serde_json::to_string(m).ok());
+
+    // Convert frames to Arrow IPC bytes
+    let frames_struct_array = slippi_game.frames.into_struct_array(
+        slippi_game.start.slippi.version,
+        &port_occupancy(&slippi_game.start),
+    );
+
+    // Write to Arrow IPC file for memory-mapping
+    let schema = Schema::from(vec![Field {
+        name: "frame".to_string(),
+        data_type: frames_struct_array.data_type().clone(),
+        is_nullable: false,
+        metadata: Default::default(),
+    }]);
+
+    let chunk = Chunk::new(vec![Box::new(frames_struct_array) as Box<dyn Array>]);
+    
+    // Create a temporary Arrow file - using a deterministic path based on hash or temp dir
+    let arrow_path = std::env::temp_dir()
+        .join(format!("slippi_frames_{}.arrow", 
+            slippi_game.hash.as_deref().unwrap_or("unknown")));
+    
+    let arrow_file = fs::File::create(&arrow_path)
+        .expect("Failed to create Arrow file");
+    
+    let mut writer = FileWriter::try_new(
+        arrow_file,
+        schema,
+        None,
+        WriteOptions { compression: None },
+    ).expect("Failed to create Arrow writer");
+    
+    writer.write(&chunk, None).expect("Failed to write Arrow chunk");
+    writer.finish().expect("Failed to finish Arrow writer");
+
+    let arrow_path_str = arrow_path.to_str()
+        .expect("Path contains invalid UTF-8")
+        .to_string();
+
+	
+    // Leak the exported Game to Julia through jlrs.
+    let handle = unsafe { weak_handle_unchecked!() };
+    CCallRefRet::new(TypedValue::new(
+		handle, 
+		Game {
+			start: start_json,
+			end: end_json,
+			metadata: metadata_json,
+			hash: slippi_game.hash,
+			frames_arrow_path: arrow_path_str,
+    	}
+	).leak())
+}
+
 fn port_occupancy(start: &Start) -> Vec<PortOccupancy> {
     start
         .players
@@ -178,6 +258,7 @@ julia_module! {
     /// Read a Slippi replay file from the given path and return a SlippiGame object.
     struct Game;
 
+    fn read_peppi(path: JuliaString, skip_frames: i8) -> CCallRefRet<Game> as read_peppi;
     fn read_slippi(path: JuliaString, skip_frames: i8) -> CCallRefRet<Game> as read_slippi;
 
     // Expose getters to Julia
