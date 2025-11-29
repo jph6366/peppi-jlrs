@@ -171,7 +171,7 @@ fn port_occupancy(start: &Start) -> Vec<PortOccupancy> {
 
 
 julia_module! {
-    become julia_module_tutorial_init_fn;
+    become peppi_jlrs_init;
 		
 	/// read_slippi_path(path::String)
 	///
