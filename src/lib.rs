@@ -1,6 +1,6 @@
 //! Glue code to call Peppi from Julia
 //!
-//! "Peppi is a Rust parser for .slp game replay files for Super Smash Brothers Melee for the 
+//! "Peppi is a Rust parser for .slp game replay files for Super Smash Brothers Melee for the
 //! Nintendo Gamecube. Peppi aims to be the fastest parser for .slp files" - Peppi readme
 //!
 //! The content of this module is exported to Julia using the [julia_module] macro from [jlrs], or
@@ -89,9 +89,9 @@ pub fn read_slippi(path: JuliaString, skip_frames:i8) -> CCallRefRet<Game> {
     let mut reader = io::BufReader::new(file);
     // Use default parse options; `parse_opts` is accepted but not yet decoded.
     let opts = SlippiReadOpts{
-		skip_frames: skip_frames != 0,
-		..Default::default()
-	};
+        skip_frames: skip_frames != 0,
+        ..Default::default()
+    };
     let slippi_game: SlippiGame = peppi::io::slippi::read(&mut reader, Some(&opts))
         .expect("Failed to read Slippi file");
 
@@ -121,22 +121,22 @@ pub fn read_slippi(path: JuliaString, skip_frames:i8) -> CCallRefRet<Game> {
     }]);
 
     let chunk = Chunk::new(vec![Box::new(frames_struct_array) as Box<dyn Array>]);
-    
+
     // Create a temporary Arrow file - using a deterministic path based on hash or temp dir
     let arrow_path = std::env::temp_dir()
-        .join(format!("slippi_frames_{}.arrow", 
+        .join(format!("slippi_frames_{}.arrow",
             slippi_game.hash.as_deref().unwrap_or("unknown")));
-    
+
     let arrow_file = fs::File::create(&arrow_path)
         .expect("Failed to create Arrow file");
-    
+
     let mut writer = FileWriter::try_new(
         arrow_file,
         schema,
         None,
         WriteOptions { compression: None },
     ).expect("Failed to create Arrow writer");
-    
+
     writer.write(&chunk, None).expect("Failed to write Arrow chunk");
     writer.finish().expect("Failed to finish Arrow writer");
 
@@ -144,19 +144,19 @@ pub fn read_slippi(path: JuliaString, skip_frames:i8) -> CCallRefRet<Game> {
         .expect("Path contains invalid UTF-8")
         .to_string();
 
-	
+
     // Leak the exported Game to Julia through jlrs.
     let handle = unsafe { weak_handle_unchecked!() };
     CCallRefRet::new(TypedValue::new(
-		handle, 
-		Game {
-			start: start_json,
-			end: end_json,
-			metadata: metadata_json,
-			hash: slippi_game.hash,
-			frames_arrow_path: arrow_path_str,
-    	}
-	).leak())
+        handle,
+        Game {
+            start: start_json,
+            end: end_json,
+            metadata: metadata_json,
+            hash: slippi_game.hash,
+            frames_arrow_path: arrow_path_str,
+        }
+    ).leak())
 }
 
 pub fn read_peppi(path: JuliaString, skip_frames:i8) -> CCallRefRet<Game> {
@@ -173,8 +173,6 @@ pub fn read_peppi(path: JuliaString, skip_frames:i8) -> CCallRefRet<Game> {
 	};
     let slippi_game: SlippiGame = peppi::io::peppi::read(&mut reader, Some(&opts))
         .expect("Failed to read Slippi file");
-
-    // Map fields from SlippiGame similar to the PyO3 example.
     let start_json = serde_json::to_string(&slippi_game.start).unwrap_or_default();
     let end_json = slippi_game
         .end
@@ -200,22 +198,22 @@ pub fn read_peppi(path: JuliaString, skip_frames:i8) -> CCallRefRet<Game> {
     }]);
 
     let chunk = Chunk::new(vec![Box::new(frames_struct_array) as Box<dyn Array>]);
-    
+
     // Create a temporary Arrow file - using a deterministic path based on hash or temp dir
     let arrow_path = std::env::temp_dir()
-        .join(format!("slippi_frames_{}.arrow", 
+        .join(format!("slippi_frames_{}.arrow",
             slippi_game.hash.as_deref().unwrap_or("unknown")));
-    
+
     let arrow_file = fs::File::create(&arrow_path)
         .expect("Failed to create Arrow file");
-    
+
     let mut writer = FileWriter::try_new(
         arrow_file,
         schema,
         None,
         WriteOptions { compression: None },
     ).expect("Failed to create Arrow writer");
-    
+
     writer.write(&chunk, None).expect("Failed to write Arrow chunk");
     writer.finish().expect("Failed to finish Arrow writer");
 
@@ -223,19 +221,19 @@ pub fn read_peppi(path: JuliaString, skip_frames:i8) -> CCallRefRet<Game> {
         .expect("Path contains invalid UTF-8")
         .to_string();
 
-	
+
     // Leak the exported Game to Julia through jlrs.
     let handle = unsafe { weak_handle_unchecked!() };
     CCallRefRet::new(TypedValue::new(
-		handle, 
-		Game {
-			start: start_json,
-			end: end_json,
-			metadata: metadata_json,
-			hash: slippi_game.hash,
-			frames_arrow_path: arrow_path_str,
-    	}
-	).leak())
+        handle,
+        Game {
+            start: start_json,
+            end: end_json,
+            metadata: metadata_json,
+            hash: slippi_game.hash,
+            frames_arrow_path: arrow_path_str,
+        }
+    ).leak())
 }
 
 fn port_occupancy(start: &Start) -> Vec<PortOccupancy> {
@@ -252,9 +250,9 @@ fn port_occupancy(start: &Start) -> Vec<PortOccupancy> {
 
 julia_module! {
     become peppi_jlrs_init;
-		
-	/// read_slippi_path(path::String)
-	///
+
+    /// read_slippi_path(path::String)
+    ///
     /// Read a Slippi replay file from the given path and return a SlippiGame object.
     struct Game;
 
